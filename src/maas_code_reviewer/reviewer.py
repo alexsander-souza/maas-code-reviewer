@@ -86,7 +86,7 @@ nothing else.\
 
 SYSTEM_INSTRUCTION_FOOTER = """\
 Keep your review concise and actionable. Do not repeat the diff back. \
-Focus on what matters.
+Focus on what matters.\
 """
 
 TRUNCATION_NOTE = (
