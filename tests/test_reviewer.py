@@ -10,7 +10,7 @@ from maas_code_reviewer.reviewer import (
     EMPTY_DIFF_GENERAL_COMMENT,
     REVIEW_MARKER,
     REVIEW_PREAMBLE,
-    STRUCTURED_SYSTEM_INSTRUCTION,
+    STRUCTURED_SYSTEM_INSTRUCTION_FOOTER,
     SYSTEM_INSTRUCTION,
     TRUNCATION_MANIFEST_HEADER,
     TRUNCATION_NOTE,
@@ -694,7 +694,8 @@ class TestExtractJson:
 class TestBuildStructuredPrompt:
     def test_contains_structured_system_instruction(self) -> None:
         prompt = _build_structured_prompt("some diff", None)
-        assert STRUCTURED_SYSTEM_INSTRUCTION in prompt
+        assert SYSTEM_INSTRUCTION in prompt
+        assert STRUCTURED_SYSTEM_INSTRUCTION_FOOTER in prompt
 
     def test_contains_diff(self) -> None:
         prompt = _build_structured_prompt("my-diff-content", None)

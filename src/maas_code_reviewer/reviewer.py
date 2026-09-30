@@ -26,7 +26,8 @@ class NoReviewText(Exception):
     resume attempts, the model still has not emitted a text answer.
     """
 
-STRUCTURED_SYSTEM_INSTRUCTION = """\
+
+SYSTEM_INSTRUCTION = """\
 You are an experienced software engineer performing a code review. Your job is to:
 
 1. Identify bugs, logic errors, and potential issues.
@@ -36,9 +37,11 @@ You are an experienced software engineer performing a code review. Your job is t
 possible.
 
 You are provided with the diff of the proposed changes. If you need more \
-context (e.g. to understand how a changed function is used elsewhere, or to \
-read project conventions from an AGENTS.md file), use the provided tools \
-to read files or list directory contents in the merged working tree. \
+context (e.g. to understand how a changed function is used elsewhere), \
+use the provided tools to read files or list directory contents in the \
+merged working tree. If the repository contains an AGENTS.md file, read it \
+and inform your review based on its instructions.
+
 You also have access to a Google Search tool. Use it to verify factual \
 claims about external libraries, APIs, frameworks, or configuration syntax \
 before raising them as issues — your training data may be out of date. When \
@@ -52,6 +55,9 @@ whether a complementary change exists elsewhere — use the read_file tool to \
 read the relevant omitted file(s) first. Do not ask the author to verify \
 something you can check yourself by reading the file.
 
+"""
+
+STRUCTURED_SYSTEM_INSTRUCTION_FOOTER = """\
 You MUST produce your review as a JSON object matching this schema:
 
 {
@@ -78,33 +84,7 @@ re-validate until there are no errors. Then output the final JSON object and \
 nothing else.\
 """
 
-SYSTEM_INSTRUCTION = """\
-You are an experienced software engineer performing a code review on a merge \
-proposal. Your job is to:
-
-1. Identify bugs, logic errors, and potential issues.
-2. Suggest improvements for readability, maintainability, and performance.
-3. Point out any security concerns.
-4. Be constructive and specific — reference file paths and line numbers when \
-possible.
-
-You are provided with the diff of the proposed changes. If you need more \
-context (e.g. to understand how a changed function is used elsewhere, or to \
-read project conventions from an AGENTS.md file), use the provided tools \
-to read files or list directory contents in the merged working tree. \
-You also have access to a Google Search tool. Use it to verify factual \
-claims about external libraries, APIs, frameworks, or configuration syntax \
-before raising them as issues — your training data may be out of date. When \
-you are about to flag something as invalid or unsupported, search first to \
-confirm rather than relying on memory alone.
-
-When the diff is truncated (a truncation note and a manifest of omitted files \
-will be present), you are only seeing part of the change. Before raising any \
-concern that could be resolved by inspecting the omitted files — for example, \
-whether a complementary change exists elsewhere — use the read_file tool to \
-read the relevant omitted file(s) first. Do not ask the author to verify \
-something you can check yourself by reading the file.
-
+SYSTEM_INSTRUCTION_FOOTER = """\
 Keep your review concise and actionable. Do not repeat the diff back. \
 Focus on what matters.\
 """
@@ -181,9 +161,7 @@ def review_diff_structured(
     def validate_review(json_text: str) -> str:
         return _validate_review(json_text, truncated_diff)
 
-    tools: list[Callable[..., str]] = [
-        validate_review, read_file, list_directory
-    ]
+    tools: list[Callable[..., str]] = [validate_review, read_file, list_directory]
     raw_text = llm.review(prompt, tools, max_tool_calls=max_tool_calls)
 
     _populate_metrics(metrics, llm, diff)
@@ -281,7 +259,8 @@ def review_diff(
 def _build_structured_prompt(diff: str, description: str | None) -> str:
     """Construct the prompt for structured JSON review output."""
     parts: list[str] = [
-        STRUCTURED_SYSTEM_INSTRUCTION,
+        SYSTEM_INSTRUCTION,
+        STRUCTURED_SYSTEM_INSTRUCTION_FOOTER,
         "\n\n## Diff\n\n```\n",
         diff,
         "\n```\n",
@@ -328,7 +307,13 @@ def _extract_json(text: str) -> str:
 
 def _build_prompt(diff: str, description: str | None) -> str:
     """Construct the full prompt from the system instruction, diff, and description."""
-    parts: list[str] = [SYSTEM_INSTRUCTION, "\n\n## Diff\n\n```\n", diff, "\n```\n"]
+    parts: list[str] = [
+        SYSTEM_INSTRUCTION,
+        SYSTEM_INSTRUCTION_FOOTER,
+        "\n\n## Diff\n\n```\n",
+        diff,
+        "\n```\n",
+    ]
 
     if description:
         parts.append("\n## Merge Proposal Description\n\n")
@@ -438,9 +423,7 @@ def _truncate_diff(diff: str, max_chars: int) -> str:
     # every fitting file in full, so no hunk is ever split.
     last_fitting_end = 0
     for i, offset in enumerate(header_offsets):
-        file_end = (
-            header_offsets[i + 1] if i + 1 < len(header_offsets) else len(diff)
-        )
+        file_end = header_offsets[i + 1] if i + 1 < len(header_offsets) else len(diff)
         if file_end <= max_chars:
             last_fitting_end = file_end
         else:
